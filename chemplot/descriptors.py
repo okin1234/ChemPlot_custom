@@ -8,6 +8,7 @@ import pandas as pd
 import math
 import mordred
 import numpy as np
+from tqdm import tqdm
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -15,6 +16,10 @@ from mordred import Calculator, descriptors #Dont remove these imports
 from sklearn.linear_model import Lasso, LogisticRegression
 from sklearn.feature_selection import SelectFromModel
 from sklearn.preprocessing import StandardScaler
+
+import torch
+from torch.utils.data import Dataset, DataLoader
+from transformers import AutoModel, AutoTokenizer, AutoConfig
 
 def get_mordred_descriptors(smiles_list, target_list):
     """
@@ -237,3 +242,103 @@ def generate_ecfp(encoding_list, encoding_function, encoding_name, target_list, 
     df_ecfp_fingerprints = df_ecfp_fingerprints.loc[:, (df_ecfp_fingerprints != 1).any(axis=0)]
     
     return mols, df_ecfp_fingerprints, target_list
+
+
+def get_bertfeatures(smiles_list, target_list):
+    """
+    Calculates the SMILESBERT fingerprint for given SMILES list
+    
+    :param smiles_list: List of SMILES 
+    :type smiles_list: list
+    :returns: The calculated SMILESBERT fingerprints for the given SMILES
+    :rtype: Dataframe
+    """  
+    
+    return generate_bertfeatures(smiles_list, Chem.MolFromSmiles, 'SMILES', target_list)
+
+
+def generate_bertfeatures(encoding_list, encoding_function, encoding_name, target_list):
+    """
+    Calculates the SMILESBERT fingerprint for given list of molecules encodings
+    
+    :param encoding_list: List of molecules encodings
+    :param encoding_function: Function used to extract the molecules from the encodings  
+    :param radius: The ECPF fingerprints radius.  
+    :type encoding_list: list
+    :type encoding_function: fun
+    :returns: The calculated SMILESBERT fingerprints for the given molecules encodings
+    :rtype: Dataframe
+    """  
+    # model, tokenizer settings
+    model_name = "seyonec/SMILES_tokenized_PubChem_shard00_160k"
+    config = AutoConfig.from_pretrained(model_name)
+    model = AutoModel.from_config(config)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model.to(device)
+    model.eval()
+    
+    # Generate BERT fingerprints
+    nBits=768
+    mols=[]
+    bert_fingerprints=[]
+    erroneous_encodings=[]
+    print('start to generate features')
+    smiles_list = encoding_list.to_list()
+    encoding_list = [encoding_function(encoding) for encoding in encoding_list]
+    mols = encoding_list
+    # isomericSmiles, kekuleSmiles, canonicalSmiles, AddHs testing 필요
+    #smiles_list = [Chem.MolToSmiles(mol, kekuleSmiles=True) for mol in encoding_list]
+    encoding_list = tokenizer.batch_encode_plus(smiles_list, padding=True)
+    data_loader = encoding_to_loader(encoding_list)
+    bert_fingerprints = get_predicts(model, data_loader, device)
+    
+    # Create dataframe of fingerprints
+    df_bert_fingerprints = pd.DataFrame(data = bert_fingerprints, index = smiles_list)
+    
+    # Remove erroneous data
+    if len(erroneous_encodings)>0:
+        print("The following erroneous {} have been found in the data:\n{}.\nThe erroneous {} will be removed from the data.".format(encoding_name, '\n'.join(map(str, erroneous_encodings)), encoding_name))
+    
+    if len(target_list)>0:
+        if not isinstance(target_list,list): target_list = target_list.values
+        df_bert_fingerprints = df_bert_fingerprints.assign(target=target_list)
+        
+    df_bert_fingerprints = df_bert_fingerprints.dropna(how='any')
+    
+    if len(target_list)>0:
+        target_list = df_bert_fingerprints['target'].to_list()
+        df_bert_fingerprints = df_bert_fingerprints.drop(columns=['target'])
+    
+    # Remove bit columns with no variablity (all "0" or all "1")
+    df_bert_fingerprints = df_bert_fingerprints.loc[:, (df_bert_fingerprints != 0).any(axis=0)]
+    df_bert_fingerprints = df_bert_fingerprints.loc[:, (df_bert_fingerprints != 1).any(axis=0)]
+    
+    return mols, df_bert_fingerprints, target_list
+
+def encoding_to_loader(encodings):
+    class CustomDataset(torch.utils.data.Dataset):
+        def __init__(self, encodings):
+            self.encodings = encodings
+
+        def __getitem__(self, idx):
+            item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
+            return item
+
+        def __len__(self):
+            return len(self.encodings['input_ids'])
+
+    dataset = CustomDataset(encodings)
+    data_loader = DataLoader(dataset, batch_size=4)
+    return data_loader
+
+def get_predicts(model, data_loader, device):
+    with torch.no_grad():
+        embeded_data_list = []
+        for batch in tqdm(data_loader):
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            out = model(input_ids=input_ids, attention_mask=attention_mask)
+            embeded_data = out[1]
+            embeded_data_list.extend(embeded_data.detach().cpu().numpy())
+    return np.array(embeded_data_list)

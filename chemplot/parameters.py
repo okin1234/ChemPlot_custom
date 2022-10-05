@@ -82,6 +82,10 @@ TOOLTIPS_TARGET = """
                 <span style="font-size: 15px;">Target Value:</span>
                 <span style="font-size: 13px; color: #696;">@target</span>
             </div>
+            <div>
+                <span style="font-size: 15px;">id:</span>
+                <span style="font-size: 13px; color: #696;">@id</span>
+            </div>
         </div>
     """
     
@@ -93,6 +97,10 @@ TOOLTIPS_NO_TARGET = """
                     style="float: left; margin: 0px 15px 15px 0px;"
                     border="2"
                 ></img>
+            </div>
+            <div>
+                <span style="font-size: 15px;">id:</span>
+                <span style="font-size: 13px; color: #696;">@id</span>
             </div>
         </div>
     """
@@ -108,6 +116,10 @@ TOOLTIPS_CLUSTER = """
             </div>
             <div>
                 <span style="font-size: 13px;">@clusters</span>
+            </div>
+            <div>
+                <span style="font-size: 15px;">id:</span>
+                <span style="font-size: 13px; color: #696;">@id</span>
             </div>
         </div>
     """

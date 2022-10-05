@@ -3,8 +3,10 @@
 # License: BSD 3 clause 
 from __future__ import print_function
 
-import chemplot.descriptors as desc
-import chemplot.parameters as parameters
+#import chemplot.descriptors as desc
+#import chemplot.parameters as parameters
+from . import descriptors as desc
+from . import parameters as parameters
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,6 +15,7 @@ import umap
 import base64
 import functools
 
+import hdbscan
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.manifold import TSNE
@@ -25,6 +28,7 @@ from bokeh.palettes import Category10, Inferno, Spectral4
 from bokeh.models.mappers import LinearColorMapper
 from bokeh.models import ColorBar, HoverTool, Panel, Tabs
 from bokeh.io import output_file, save, show
+from bokeh.layouts import row, gridplot
 from scipy import stats
 from io import BytesIO
 
@@ -71,11 +75,11 @@ class Plotter(object):
     
     _interactive_plots = {'scatter', 'hex'}
     
-    _sim_types = {'tailored', 'structural'}
+    _sim_types = {'tailored', 'structural', 'smilesbert'}
     
     _target_types = {'R', 'C'}
 
-    def __init__(self, encoding_list, target, target_type, sim_type, get_desc, get_fingerprints):
+    def __init__(self, encoding_list, target, target_type, sim_type, get_desc, get_fingerprints, get_bertfeatures, id_list=None):
            
         # Error handeling sym_type
         if sim_type not in self._sim_types:
@@ -92,7 +96,7 @@ class Plotter(object):
         else:
             self.__sim_type = sim_type
          
-        if self.__sim_type != "structural" and len(target) == 0:
+        if self.__sim_type != "structural" and self.__sim_type != "smilesbert" and len(target) == 0:
             raise Exception("Target values missing")
         
         # Error handeling target_type                
@@ -138,15 +142,23 @@ class Plotter(object):
         elif self.__sim_type == "structural":
             self.__mols, self.__df_descriptors, self.__target = get_fingerprints(encoding_list,target,2,2048)
             
+        elif self.__sim_type == "smilesbert":
+            self.__mols, self.__df_descriptors, self.__target = get_bertfeatures(encoding_list,target)
+            
         if len(self.__mols) < 2 or len(self.__df_descriptors.columns) < 2:
             raise Exception("Plotter object cannot be instantiated for given molecules")
                 
         self.__df_2_components = None
         self.__plot_title = None
+        
+        if id_list != None:
+            self.__id = list(id_list)
+        else:
+            self.__id = list(range(len(self.__mols)))
             
     
     @classmethod        
-    def from_smiles(cls, smiles_list, target=[], target_type=None, sim_type=None):
+    def from_smiles(cls, smiles_list, target=[], target_type=None, sim_type=None, id_list=None):
         """
         Class method to construct a Plotter object from a list of SMILES.
         
@@ -162,7 +174,7 @@ class Plotter(object):
         :rtype: Plotter
         """
             
-        return cls(smiles_list, target, target_type, sim_type, desc.get_mordred_descriptors, desc.get_ecfp)
+        return cls(smiles_list, target, target_type, sim_type, desc.get_mordred_descriptors, desc.get_ecfp, desc.get_bertfeatures, id_list)
             
 
     @classmethod
@@ -212,7 +224,8 @@ class Plotter(object):
         
         if len(self.__target) > 0: 
             self.__df_2_components['target'] = self.__target
-        
+        if len(self.__id) > 0:
+            self.__df_2_components['id'] = self.__id
         return self.__df_2_components.copy()
     
     
@@ -264,6 +277,8 @@ class Plotter(object):
             
         if len(self.__target) > 0: 
             self.__df_2_components['target'] = self.__target
+        if len(self.__id) > 0:
+            self.__df_2_components['id'] = self.__id
         
         return self.__df_2_components.copy()
         
@@ -314,23 +329,27 @@ class Plotter(object):
                 min_dist = parameters.MIN_DIST_TAILORED
             
         # Embed the data in two dimensions
+        print('n_neighbors: ', n_neighbors)
+        print('min_dist: ', min_dist)
         self.umap_fit = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, random_state=random_state, n_components=2, **kwargs)
         ecfp_umap_embedding = self.umap_fit.fit_transform(self.__data)
         # Create a dataframe containinting the first 2 UMAP components of ECFP 
-        self.__df_2_components = pd.DataFrame(data = ecfp_umap_embedding
-             , columns = ['UMAP-1', 'UMAP-2'])
+        self.__df_2_components = pd.DataFrame(data = ecfp_umap_embedding, columns = ['UMAP-1', 'UMAP-2'])
         
         if len(self.__target) > 0: 
             self.__df_2_components['target'] = self.__target
+        if len(self.__id) > 0:
+            self.__df_2_components['id'] = self.__id
         
         return self.__df_2_components.copy()
     
     
-    def cluster(self, n_clusters=5, **kwargs):
+    def cluster(self, n_clusters=5, type='kmenas', min_cluster_size=15, random_state=1000, **kwargs):
         """
         Computes the clusters presents in the embedded chemical space.
         
         :param n_clusters: Number of clusters that will be computed  
+        :param type: kmeans or hdbscan
         :param kwargs: Other keyword arguments are passed down to sklearn.cluster.KMeans
         :type n_clusters: int
         :type kwargs: key, value mappings
@@ -344,10 +363,12 @@ class Plotter(object):
         x = self.__df_2_components.columns[0]
         y = self.__df_2_components.columns[1]
         
-        cluster = KMeans(n_clusters, **kwargs)
-        
-        cluster.fit(self.__df_2_components[[x,y]])
-        self.__df_2_components['clusters'] = cluster.labels_.tolist()
+        if type == 'kmeans':
+            self.__cluster_fit = KMeans(n_clusters=n_clusters, random_state=random_state, **kwargs)
+            self.__df_2_components['clusters'] = self.__cluster_fit.fit_predict(self.__df_2_components[[x, y]])
+        elif type == 'hdbscan':
+            self.__cluster_fit = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, **kwargs)
+            self.__df_2_components['clusters'] = self.__cluster_fit.fit_predict(self.__df_2_components[[x, y]])    
         
         return self.__df_2_components.copy()
     
@@ -480,7 +501,7 @@ class Plotter(object):
         
         return axis
     
-    def interactive_plot(self, size=700, kind="scatter", remove_outliers=False, is_colored=True, clusters=False, filename=None, show_plot=False, title=None,):
+    def interactive_plot(self, size=700, kind="scatter", remove_outliers=False, is_colored=True, clusters=False, filename=None, show_plot=False, title=None, property_plot=False, x_=None, y_=None):
         """
         Generates an interactive Bokeh plot for the given molecules embedded in two dimensions.
         
@@ -541,6 +562,17 @@ class Plotter(object):
         else: 
             p = self.__interactive_hex(x, y, df_data, size, title)
             
+        if property_plot:
+            x, y, df_data = self.__parse_dataframe()
+            x_id = x_.name
+            y_id = y_.name
+            df_data.iloc[:,0] = x_
+            df_data.iloc[:,1] = y_
+            #df_data.rename(columns={x: x_id, y: y_id}, inplace=True)
+            df_data['mols'] = self.__mols
+            p_, tabs_ = self.__interactive_scatter(x, y, df_data, size, is_colored, clusters, title)
+            
+            
         p.xaxis[0].axis_label = x
         p.yaxis[0].axis_label = y
         
@@ -553,7 +585,13 @@ class Plotter(object):
         
         if tabs is not None:
             p = tabs
-            
+            if property_plot:
+                p_ = tabs_
+
+        if property_plot:
+            #p = row(p, p_)
+            p = gridplot([[p, p_]])
+
         # Save plot
         if filename is not None:
             output_file(filename, title=title)
@@ -608,12 +646,12 @@ class Plotter(object):
         df_data.clusters.replace(labels, inplace=True)
         return list(labels.values())
             
-    def __interactive_scatter(self, x, y, df_data, size, is_colored, clusters, title):       
+    def __interactive_scatter(self, x, y, df_data, size, is_colored, clusters, title):
         # Add images column
         df_data['imgs'] = self.__mol_to_2Dimage(list(df_data['mols']))
         df_data.drop(columns=['mols'], inplace=True)
         # Set tools
-        tools = "pan, lasso_select, wheel_zoom, hover, save, reset"
+        tools = "pan, lasso_select, wheel_zoom, hover, save, reset, crosshair"
         
         if len(self.__target) == 0:
             TOOLTIPS = parameters.TOOLTIPS_NO_TARGET
@@ -624,19 +662,20 @@ class Plotter(object):
         p = figure(title=title, plot_width=size, plot_height=size, tools=tools, tooltips=TOOLTIPS)
         
         if len(self.__target) == 0 or not(is_colored):
-            p.circle(x=x, y=y, size=2.5, alpha=0.8, source=df_data)
+            p.circle(x=x, y=y, size=4.0, alpha=0.8, source=df_data)
         else:
             # Target exists
             if self.__target_type == 'C':
                 index_cmap = factor_cmap('target', Category10[10], list(set(df_data['target'])))
-                p.circle(x=x, y=y, size=2.5, alpha=0.8, line_color=index_cmap, fill_color=index_cmap,
+                p.circle(x=x, y=y, size=4.0, alpha=0.8, line_color=index_cmap, fill_color=index_cmap,
                      legend_group="target", source=df_data)
                 p.legend.location = "top_left"
                 p.legend.title = "Target"
             else:
                 color_mapper = LinearColorMapper(Inferno[256], low=min(df_data['target']), high=max(df_data['target']))
                 index_cmap = transform('target', color_mapper)
-                p.circle(x=x, y=y, size=2.5, alpha=0.8, line_color=index_cmap, fill_color=index_cmap,
+                df_data.to_csv('test_2.csv', index=False)
+                p.circle(x=x, y=y, size=4.0, alpha=0.8, line_color=index_cmap, fill_color=index_cmap,
                      source=df_data)
                 color_bar = ColorBar(color_mapper=color_mapper, location=(0,0))
                 p.add_layout(color_bar, 'right')
@@ -648,7 +687,7 @@ class Plotter(object):
             self.__percentage_clusters(df_data)
             clusters = df_data.groupby(['clusters'])
             for cluster, color in zip(clusters, Category10[10]):
-                p_c.circle(x=x, y=y, size=2.5, alpha=1, line_color=color, fill_color=color,
+                p_c.circle(x=x, y=y, size=4.0, alpha=1, line_color=color, fill_color=color,
                      legend_label=f'{cluster[0]}', muted_color=('#717375'), muted_alpha=0.2,
                      source=cluster[1])
                 
