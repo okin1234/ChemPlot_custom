@@ -26,7 +26,7 @@ from bokeh.plotting import figure
 from bokeh.transform import transform, factor_cmap
 from bokeh.palettes import Category10, Inferno, Spectral4
 from bokeh.models.mappers import LinearColorMapper
-from bokeh.models import ColorBar, HoverTool, Panel, Tabs
+from bokeh.models import ColorBar, HoverTool, Panel, Tabs, ColumnDataSource
 from bokeh.io import output_file, save, show
 from bokeh.layouts import row, gridplot
 from scipy import stats
@@ -501,7 +501,7 @@ class Plotter(object):
         
         return axis
     
-    def interactive_plot(self, size=700, kind="scatter", remove_outliers=False, is_colored=True, clusters=False, filename=None, show_plot=False, title=None, property_plot=False, x_=None, y_=None):
+    def interactive_plot(self, size=700, kind="scatter", remove_outliers=False, is_colored=True, clusters=False, filename=None, show_plot=False, title=None, property_plot=False, property_df=None, x_=None, y_=None):
         """
         Generates an interactive Bokeh plot for the given molecules embedded in two dimensions.
         
@@ -545,6 +545,11 @@ class Plotter(object):
         x, y, df_data = self.__parse_dataframe()
         df_data['mols'] = self.__mols
         
+        # add additional property to plot
+        if property_plot:
+            for c in property_df.columns:
+                df_data[c] = property_df[c]
+        
         if len(self.__target) > 0:
             # Target exists
             if self.__target_type == 'C':
@@ -563,14 +568,13 @@ class Plotter(object):
             p = self.__interactive_hex(x, y, df_data, size, title)
             
         if property_plot:
-            x, y, df_data = self.__parse_dataframe()
-            x_id = x_.name
-            y_id = y_.name
-            df_data.iloc[:,0] = x_
-            df_data.iloc[:,1] = y_
+            #x, y, df_data = self.__parse_dataframe()
+            #df_data.iloc[:,0] = x_
+            #df_data.iloc[:,1] = y_
             #df_data.rename(columns={x: x_id, y: y_id}, inplace=True)
+            
             df_data['mols'] = self.__mols
-            p_, tabs_ = self.__interactive_scatter(x, y, df_data, size, is_colored, clusters, title)
+            p_, tabs_ = self.__interactive_scatter(x_, y_, df_data, size, is_colored, clusters, title)
             
             
         p.xaxis[0].axis_label = x
@@ -650,6 +654,11 @@ class Plotter(object):
         # Add images column
         df_data['imgs'] = self.__mol_to_2Dimage(list(df_data['mols']))
         df_data.drop(columns=['mols'], inplace=True)
+        
+        # source data setting
+        if not hasattr(self, 'source_data'):
+            self.source_data = ColumnDataSource(df_data)
+        
         # Set tools
         tools = "pan, lasso_select, wheel_zoom, hover, save, reset, crosshair"
         
@@ -662,21 +671,20 @@ class Plotter(object):
         p = figure(title=title, plot_width=size, plot_height=size, tools=tools, tooltips=TOOLTIPS)
         
         if len(self.__target) == 0 or not(is_colored):
-            p.circle(x=x, y=y, size=4.0, alpha=0.8, source=df_data)
+            p.circle(x=x, y=y, size=4.0, alpha=0.8, source=self.source_data)
         else:
             # Target exists
             if self.__target_type == 'C':
                 index_cmap = factor_cmap('target', Category10[10], list(set(df_data['target'])))
                 p.circle(x=x, y=y, size=4.0, alpha=0.8, line_color=index_cmap, fill_color=index_cmap,
-                     legend_group="target", source=df_data)
+                     legend_group="target", source=self.source_data)
                 p.legend.location = "top_left"
                 p.legend.title = "Target"
             else:
                 color_mapper = LinearColorMapper(Inferno[256], low=min(df_data['target']), high=max(df_data['target']))
                 index_cmap = transform('target', color_mapper)
-                df_data.to_csv('test_2.csv', index=False)
                 p.circle(x=x, y=y, size=4.0, alpha=0.8, line_color=index_cmap, fill_color=index_cmap,
-                     source=df_data)
+                     source=self.source_data)
                 color_bar = ColorBar(color_mapper=color_mapper, location=(0,0))
                 p.add_layout(color_bar, 'right')
         
