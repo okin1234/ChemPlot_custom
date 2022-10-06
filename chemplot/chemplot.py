@@ -24,7 +24,7 @@ from pandas.api.types import is_numeric_dtype
 from rdkit.Chem import Draw
 from bokeh.plotting import figure
 from bokeh.transform import transform, factor_cmap
-from bokeh.palettes import Category10, Inferno, Spectral4
+from bokeh.palettes import Category10, Inferno, Spectral4, Spectral6
 from bokeh.models.mappers import LinearColorMapper
 from bokeh.models import ColorBar, HoverTool, Panel, Tabs, ColumnDataSource
 from bokeh.io import output_file, save, show
@@ -692,12 +692,20 @@ class Plotter(object):
         if clusters and 'clusters' in df_data.columns:
             p_c = figure(title=title, plot_width=size, plot_height=size, tools=tools, tooltips=parameters.TOOLTIPS_CLUSTER)
             # Get percentages
-            self.__percentage_clusters(df_data)
+            if not hasattr(self, 'source_data_cluster'):
+                self.__percentage_clusters(df_data)
+                self.source_data_cluster = ColumnDataSource(df_data)
+                
             clusters = df_data.groupby(['clusters'])
             for cluster, color in zip(clusters, Category10[10]):
                 p_c.circle(x=x, y=y, size=4.0, alpha=1, line_color=color, fill_color=color,
                      legend_label=f'{cluster[0]}', muted_color=('#717375'), muted_alpha=0.2,
                      source=cluster[1])
+            
+            
+            #p_c.circle(x=x, y=y, size=4.0, alpha=1, legend_field='clusters', muted_color=('#717375'), muted_alpha=0.2, source=self.source_data_cluster,
+            #           legend_label=['a', 'b', 'c'],
+            #           line_color=factor_cmap('clusters', Category10[10], list(set(df_data['clusters']))), fill_color=factor_cmap('clusters', Category10[10], list(set(df_data['clusters']))))
                 
             p_c.legend.location = "top_left"
             p_c.legend.title = "Clusters"
