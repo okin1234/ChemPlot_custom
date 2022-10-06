@@ -20,6 +20,7 @@ from sklearn.preprocessing import StandardScaler
 import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoModel, AutoTokenizer, AutoConfig
+from .MolCLR.get_emb import Get_Embeddings
 
 def get_mordred_descriptors(smiles_list, target_list):
     """
@@ -342,3 +343,45 @@ def get_predicts(model, data_loader, device):
             embeded_data = out[1]
             embeded_data_list.extend(embeded_data.detach().cpu().numpy())
     return np.array(embeded_data_list)
+
+
+def get_MolCLRfeatures(smiles_list, target_list):
+    """
+    Calculates the MolCLR fingerprint for given SMILES list
+    
+    :param smiles_list: List of SMILES 
+    :type smiles_list: list
+    :returns: The calculated MolCLR fingerprints for the given SMILES
+    :rtype: Dataframe
+    """  
+    
+    return generate_MolCLRfeatures(smiles_list, Chem.MolFromSmiles, 'SMILES', target_list)
+
+def generate_MolCLRfeatures(encoding_list, encoding_function, encoding_name, target_list):
+    config = 'ChemPlot_custom/chemplot/MolCLR/config.yaml'
+    smiles_list = encoding_list.to_list()
+    molclr_get_emb = Get_Embeddings(config, smiles_list)
+    mols, molclr_fingerprints = molclr_get_emb.get()
+    
+    df_molclr_fingerprints = pd.DataFrame(data = molclr_fingerprints, index = smiles_list)
+    
+    erroneous_encodings=[]
+    # Remove erroneous data
+    if len(erroneous_encodings)>0:
+        print("The following erroneous {} have been found in the data:\n{}.\nThe erroneous {} will be removed from the data.".format(encoding_name, '\n'.join(map(str, erroneous_encodings)), encoding_name))
+    
+    if len(target_list)>0:
+        if not isinstance(target_list,list): target_list = target_list.values
+        df_molclr_fingerprints = df_molclr_fingerprints.assign(target=target_list)
+        
+    df_molclr_fingerprints = df_molclr_fingerprints.dropna(how='any')
+    
+    if len(target_list)>0:
+        target_list = df_molclr_fingerprints['target'].to_list()
+        df_molclr_fingerprints = df_molclr_fingerprints.drop(columns=['target'])
+    
+    # Remove bit columns with no variablity (all "0" or all "1")
+    df_molclr_fingerprints = df_molclr_fingerprints.loc[:, (df_molclr_fingerprints != 0).any(axis=0)]
+    df_molclr_fingerprints = df_molclr_fingerprints.loc[:, (df_molclr_fingerprints != 1).any(axis=0)]
+    
+    return mols, df_molclr_fingerprints, target_list

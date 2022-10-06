@@ -14,6 +14,8 @@ import seaborn as sns
 import umap
 import base64
 import functools
+import torch
+import random
 
 import hdbscan
 from sklearn.decomposition import PCA
@@ -75,12 +77,14 @@ class Plotter(object):
     
     _interactive_plots = {'scatter', 'hex'}
     
-    _sim_types = {'tailored', 'structural', 'smilesbert'}
+    _sim_types = {'tailored', 'structural', 'smilesbert', 'MolCLR'}
     
     _target_types = {'R', 'C'}
 
-    def __init__(self, encoding_list, target, target_type, sim_type, get_desc, get_fingerprints, get_bertfeatures, id_list=None):
-           
+    def __init__(self, encoding_list, target, target_type, sim_type, get_desc, get_fingerprints, get_bertfeatures, get_MolCLRfeatures, id_list=None, seed=100):
+        # set random seed for random, torch, numpy
+        self.set_seed(seed)
+        
         # Error handeling sym_type
         if sim_type not in self._sim_types:
             if len(target) > 0:
@@ -96,7 +100,7 @@ class Plotter(object):
         else:
             self.__sim_type = sim_type
          
-        if self.__sim_type != "structural" and self.__sim_type != "smilesbert" and len(target) == 0:
+        if self.__sim_type != "structural" and self.__sim_type != "smilesbert" and self.__sim_type != "MolCLR" and len(target) == 0:
             raise Exception("Target values missing")
         
         # Error handeling target_type                
@@ -145,6 +149,9 @@ class Plotter(object):
         elif self.__sim_type == "smilesbert":
             self.__mols, self.__df_descriptors, self.__target = get_bertfeatures(encoding_list,target)
             
+        elif self.__sim_type == "MolCLR":
+            self.__mols, self.__df_descriptors, self.__target = get_MolCLRfeatures(encoding_list,target)
+            
         if len(self.__mols) < 2 or len(self.__df_descriptors.columns) < 2:
             raise Exception("Plotter object cannot be instantiated for given molecules")
                 
@@ -174,7 +181,7 @@ class Plotter(object):
         :rtype: Plotter
         """
             
-        return cls(smiles_list, target, target_type, sim_type, desc.get_mordred_descriptors, desc.get_ecfp, desc.get_bertfeatures, id_list)
+        return cls(smiles_list, target, target_type, sim_type, desc.get_mordred_descriptors, desc.get_ecfp, desc.get_bertfeatures, desc.get_MolCLRfeatures, id_list)
             
 
     @classmethod
@@ -778,3 +785,11 @@ class Plotter(object):
     
     def get_target(self):
         return self.__target
+    
+    def set_seed(self, seed):
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        np.random.seed(seed)
+        random.seed(seed)
