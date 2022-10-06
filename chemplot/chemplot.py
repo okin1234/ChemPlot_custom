@@ -26,7 +26,7 @@ from pandas.api.types import is_numeric_dtype
 from rdkit.Chem import Draw
 from bokeh.plotting import figure
 from bokeh.transform import transform, factor_cmap
-from bokeh.palettes import Category10, Inferno, Spectral4, Spectral6
+from bokeh.palettes import Category10, Inferno, Spectral4, Spectral6, Set2
 from bokeh.models.mappers import LinearColorMapper
 from bokeh.models import ColorBar, HoverTool, Panel, Tabs, ColumnDataSource
 from bokeh.io import output_file, save, show
@@ -682,7 +682,7 @@ class Plotter(object):
         else:
             # Target exists
             if self.__target_type == 'C':
-                index_cmap = factor_cmap('target', Category10[10], list(set(df_data['target'])))
+                index_cmap = factor_cmap('target', Set2[8], list(set(df_data['target'])))
                 p.circle(x=x, y=y, size=4.0, alpha=0.8, line_color=index_cmap, fill_color=index_cmap,
                      legend_group="target", source=self.source_data)
                 p.legend.location = "top_left"
@@ -704,7 +704,7 @@ class Plotter(object):
                 self.source_data_cluster = ColumnDataSource(df_data)
                 
             clusters = df_data.groupby(['clusters'])
-            for cluster, color in zip(clusters, Category10[10]):
+            for cluster, color in zip(clusters, Set2[8]):
                 p_c.circle(x=x, y=y, size=4.0, alpha=1, line_color=color, fill_color=color,
                      legend_label=f'{cluster[0]}', muted_color=('#717375'), muted_alpha=0.2,
                      source=cluster[1])
