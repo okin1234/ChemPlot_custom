@@ -12,6 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import umap
+from umap.parametric_umap import ParametricUMAP
 import base64
 import functools
 import torch
@@ -290,7 +291,7 @@ class Plotter(object):
         return self.__df_2_components.copy()
         
         
-    def umap(self, n_neighbors=None, min_dist=None, pca=False, random_state=None, **kwargs):
+    def umap(self, n_neighbors=None, min_dist=None, pca=False, random_state=None, parametric=False, densmap=False, **kwargs):
         """
         Calculates the first 2 UMAP components of the molecular descriptors.
         
@@ -336,9 +337,12 @@ class Plotter(object):
                 min_dist = parameters.MIN_DIST_TAILORED
             
         # Embed the data in two dimensions
-        print('n_neighbors: ', n_neighbors)
-        print('min_dist: ', min_dist)
-        self.umap_fit = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, random_state=random_state, n_components=2, **kwargs)
+        #print('n_neighbors: ', n_neighbors)
+        #print('min_dist: ', min_dist)
+        if not parametric:
+            self.umap_fit = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, random_state=random_state, n_components=2, densmap=densmap, **kwargs)
+        else:
+            self.umap_fit = umap.ParametricUMAP(n_neighbors=n_neighbors, min_dist=min_dist, random_state=random_state, n_components=2, densmap=densmap, **kwargs)
         ecfp_umap_embedding = self.umap_fit.fit_transform(self.__data)
         # Create a dataframe containinting the first 2 UMAP components of ECFP 
         self.__df_2_components = pd.DataFrame(data = ecfp_umap_embedding, columns = ['UMAP-1', 'UMAP-2'])
