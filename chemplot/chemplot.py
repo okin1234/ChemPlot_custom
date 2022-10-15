@@ -291,7 +291,7 @@ class Plotter(object):
         return self.__df_2_components.copy()
         
         
-    def umap(self, n_neighbors=None, min_dist=None, pca=False, random_state=None, parametric=False, densmap=False, **kwargs):
+    def umap(self, n_neighbors=None, min_dist=None, pca=False, random_state=None, parametric=False, densmap=False, y=None, **kwargs):
         """
         Calculates the first 2 UMAP components of the molecular descriptors.
         
@@ -343,7 +343,7 @@ class Plotter(object):
             self.umap_fit = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, random_state=random_state, n_components=2, densmap=densmap, **kwargs)
         else:
             self.umap_fit = umap.ParametricUMAP(n_neighbors=n_neighbors, min_dist=min_dist, random_state=random_state, n_components=2, densmap=densmap, **kwargs)
-        ecfp_umap_embedding = self.umap_fit.fit_transform(self.__data)
+        ecfp_umap_embedding = self.umap_fit.fit_transform(self.__data, y=y)
         # Create a dataframe containinting the first 2 UMAP components of ECFP 
         self.__df_2_components = pd.DataFrame(data = ecfp_umap_embedding, columns = ['UMAP-1', 'UMAP-2'])
         
