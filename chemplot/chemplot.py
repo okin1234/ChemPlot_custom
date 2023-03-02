@@ -17,6 +17,7 @@ import base64
 import functools
 import torch
 import random
+import os
 
 import hdbscan
 from sklearn.decomposition import PCA
@@ -506,6 +507,8 @@ class Plotter(object):
         
         # Save plot
         if filename is not None:
+            if not os.path.exists(os.path.dirname(filename)):
+                self.make_dir(os.path.dirname(filename))
             fig.savefig(filename)
             
         self.df_plot_xy = df_data[[x,y]]
@@ -609,6 +612,8 @@ class Plotter(object):
 
         # Save plot
         if filename is not None:
+            if not os.path.exists(os.path.dirname(filename)):
+                self.make_dir(os.path.dirname(filename))
             output_file(filename, title=title)
             save(p)
         
@@ -797,3 +802,7 @@ class Plotter(object):
         torch.cuda.manual_seed_all(seed)
         np.random.seed(seed)
         random.seed(seed)
+        
+    def make_dir(self, path):
+        if not os.path.exists(path):
+            os.makedirs(path)

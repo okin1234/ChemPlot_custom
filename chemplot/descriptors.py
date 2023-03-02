@@ -271,7 +271,13 @@ def generate_bertfeatures(encoding_list, encoding_function, encoding_name, targe
     :rtype: Dataframe
     """  
     # model, tokenizer settings
-    model_name = "seyonec/SMILES_tokenized_PubChem_shard00_160k"
+    #model_name = "seyonec/SMILES_tokenized_PubChem_shard00_160k"
+    #model_name = "DeepChem/ChemBERTa-77M-MLM"
+    #model_name = "seyonec/ChemBERTa-zinc-base-v1"
+    #model_name = "seyonec/ChemBERTA_PubChem1M_shard00_155k"
+    #model_name = "mrm8488/chEMBL_smiles_v1"
+    model_name = "DeepChem/ChemBERTa-10M-MTR"
+    
     config = AutoConfig.from_pretrained(model_name)
     model = AutoModel.from_config(config)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
