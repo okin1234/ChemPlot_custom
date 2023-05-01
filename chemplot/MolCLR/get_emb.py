@@ -53,9 +53,10 @@ class Get_Embeddings(object):
         try:
             #checkpoints_folder = os.path.join('./ckpt', self.config['fine_tune_from'], 'checkpoints')
             #state_dict = torch.load(os.path.join(checkpoints_folder, 'model.pth'), map_location=self.device)
-            state_dict = torch.load(self.config['fine_tune_from'], map_location=self.device)
-            # model.load_state_dict(state_dict)
-            model.load_my_state_dict(state_dict)
+            load_path = os.path.join(os.path.dirname(__file__), self.config['fine_tune_from'])
+            state_dict = torch.load(load_path, map_location=self.device)
+            model.load_state_dict(state_dict)
+            #model.load_my_state_dict(state_dict)
             print("Loaded pre-trained model with success.")
         except FileNotFoundError:
             print("Pre-trained weights not found. Training from scratch.")
